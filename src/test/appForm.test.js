@@ -1,4 +1,5 @@
 var expect = require("chai").expect;
+var config = require("../js/config/config");
 
 var expectAsync = require("./helpers/expectAsync");
 var FormActions = require("../js/actions/FormActions");
@@ -8,12 +9,9 @@ var AppsEvents = require("../js/events/AppsEvents");
 var AppsStore = require("../js/stores/AppsStore");
 var AppFormErrorMessages = require("../js/constants/AppFormErrorMessages");
 var AppFormStore = require("../js/stores/AppFormStore");
+var nock = require("nock");
 
-var config = require("../js/config/config");
-
-var HttpServer = require("./helpers/HttpServer").HttpServer;
-
-var server = new HttpServer(config.localTestserverURI);
+var server = config.localTestserverURI;
 config.apiURL = "http://" + server.address + ":" + server.port + "/";
 
 describe("App Form", function () {
@@ -706,27 +704,9 @@ describe("App Form", function () {
 
   describe("on server response errors", function () {
 
-    before(function (done) {
-      this.server = server
-      .setup({}, 200)
-      .start(done);
-    });
-
-    after(function (done) {
-      this.server.stop(done);
-    });
-
     describe("App form store", function () {
 
       it("processes a 400 error response correctly", function (done) {
-        this.server.setup({
-          details: [{
-            "path": "/instances",
-            "errors": [
-              "error.expected.jsnumber"
-            ]
-          }]
-        }, 400);
 
         AppsStore.once(AppsEvents.CREATE_APP_ERROR, function () {
           expectAsync(function () {
@@ -735,15 +715,23 @@ describe("App Form", function () {
           }, done);
         });
 
+        nock(config.apiURL)
+          .post("/v2/apps")
+          .reply(400, {
+            "details": [{
+              "path": "/instances",
+              "errors": [
+                "error.expected.jsnumber"
+              ]
+            }]
+          });
+
         AppsActions.createApp({
           instances: "many"
         });
       });
 
       it("processes a 409 error response message correctly", function (done) {
-        this.server.setup({
-          "message": "bad error"
-        }, 409);
 
         var expectedMessage =
           `${AppFormErrorMessages.getGeneralMessage("errorPrefix")} bad error`;
@@ -755,18 +743,16 @@ describe("App Form", function () {
           }, done);
         });
 
+        nock(config.apiURL)
+          .post("/v2/apps")
+          .reply(409, {"message": "bad error"});
+
         AppsActions.createApp({
           "howdy": "partner"
         });
       });
 
       it("processes a 422 error response correctly", function (done) {
-        this.server.setup({
-          errors: [{
-            "attribute": "id",
-            "error": "error on id attribute"
-          }]
-        }, 422);
 
         AppsStore.once(AppsEvents.CREATE_APP_ERROR, function () {
           expectAsync(function () {
@@ -775,6 +761,15 @@ describe("App Form", function () {
           }, done);
         });
 
+        nock(config.apiURL)
+          .post("/v2/apps")
+          .reply(422, {
+            "errors": [{
+              "attribute": "id",
+              "error": "error on id attribute"
+            }]
+          });
+
         AppsActions.createApp({
           id: "bad id"
         });
@@ -782,7 +777,6 @@ describe("App Form", function () {
 
       it("processes error response codes 300 to 499 correctly",
           function (done) {
-        this.server.setup("something strange", 315);
 
         AppsStore.once(AppsEvents.CREATE_APP_ERROR, function () {
           expectAsync(function () {
@@ -791,6 +785,10 @@ describe("App Form", function () {
           }, done);
         });
 
+        nock(config.apiURL)
+        .post("/v2/apps")
+        .reply(315, "something strange");
+
         AppsActions.createApp({
           "howdy": "partner"
         });
@@ -798,7 +796,6 @@ describe("App Form", function () {
 
       it("processes error response codes 401 correctly",
         function (done) {
-          this.server.setup("something strange", 401);
 
           AppsStore.once(AppsEvents.CREATE_APP_ERROR, function () {
             expectAsync(function () {
@@ -807,6 +804,10 @@ describe("App Form", function () {
             }, done);
           });
 
+          nock(config.apiURL)
+            .post("/v2/apps")
+            .reply(401, "something strange");
+
           AppsActions.createApp({
             "howdy": "partner"
           });
@@ -814,7 +815,6 @@ describe("App Form", function () {
 
       it("processes error response codes 401 with message correctly",
         function (done) {
-          this.server.setup({"message": "something strange"}, 401);
 
           AppsStore.once(AppsEvents.CREATE_APP_ERROR, function () {
             expectAsync(function () {
@@ -822,6 +822,10 @@ describe("App Form", function () {
                 .to.equal(AppFormErrorMessages.getGeneralMessage("errorPrefix") + " something strange");
             }, done);
           });
+
+          nock(config.apiURL)
+            .post("/v2/apps")
+            .reply(401, {"message": "something strange"});
 
           AppsActions.createApp({
             "howdy": "partner"
@@ -830,7 +834,6 @@ describe("App Form", function () {
 
       it("processes error response codes 403 correctly",
         function (done) {
-          this.server.setup("something strange", 403);
 
           AppsStore.once(AppsEvents.CREATE_APP_ERROR, function () {
             expectAsync(function () {
@@ -839,6 +842,10 @@ describe("App Form", function () {
             }, done);
           });
 
+          nock(config.apiURL)
+            .post("/v2/apps")
+            .reply(403, "something strange");
+
           AppsActions.createApp({
             "howdy": "partner"
           });
@@ -846,7 +853,6 @@ describe("App Form", function () {
 
       it("processes error response codes 403 with message correctly",
         function (done) {
-          this.server.setup({"message": "something strange"}, 403);
 
           AppsStore.once(AppsEvents.CREATE_APP_ERROR, function () {
             expectAsync(function () {
@@ -855,15 +861,16 @@ describe("App Form", function () {
             }, done);
           });
 
+          nock(config.apiURL)
+            .post("/v2/apps")
+            .reply(403, {"message": "something strange"});
+
           AppsActions.createApp({
             "howdy": "partner"
           });
         });
 
-
       it("processes error response codes >= 500 correctly", function (done) {
-        this.server.setup("something strange with the server", 500);
-
         AppsStore.once(AppsEvents.CREATE_APP_ERROR, function () {
           expectAsync(function () {
             expect(AppFormStore.responseErrors.general)
@@ -873,20 +880,26 @@ describe("App Form", function () {
           }, done);
         });
 
+        nock(config.apiURL)
+          .post("/v2/apps")
+          .reply(500,  "something strange with the server");
+
         AppsActions.createApp({
           "howdy": "partner"
         });
       });
 
       it("has no response errors on success", function (done) {
-        this.server.setup({id: "/app-1"}, 200);
-
         AppsStore.once(AppsEvents.CHANGE, function () {
           expectAsync(function () {
             expect(Object.keys(AppFormStore.responseErrors).length)
               .to.equal(0);
           }, done);
         });
+
+        nock(config.apiURL)
+          .post("/v2/apps")
+          .reply(200, {"id": "/app-1"});
 
         AppsActions.createApp({
           "id": "/app-1"
